@@ -1,0 +1,6 @@
+{
+  "name": "EduSync AI - Attendance, Homework & Parent Alerts",
+  "description": "AI-powered K-12 classroom management app with smart attendance tracking, curriculum-aligned homework and rubric generation, and automated parent SMS/email notification dispatch.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
