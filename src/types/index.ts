@@ -22,7 +22,24 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
   excuseReason?: string;
   markedAt: string;
+  checkInTime?: string;
+  scanMethod?: 'qr' | 'manual';
 }
+
+export interface QRScanLog {
+  id: string;
+  studentId: string;
+  studentName: string;
+  rollNumber: string;
+  grade: string;
+  section: string;
+  timestamp: string;
+  date: string;
+  status: 'success' | 'duplicate' | 'invalid';
+  scannerDevice: string;
+  message: string;
+}
+
 
 export interface HomeworkQuestion {
   id: string;

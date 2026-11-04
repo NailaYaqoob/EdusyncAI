@@ -383,9 +383,9 @@ export const NotificationTab: React.FC = () => {
                   ← Close
                 </button>
                 <div className="w-8 h-8 rounded-full bg-indigo-700 text-white font-bold text-xs mx-auto flex items-center justify-center mb-0.5">
-                  OA
+                  FG
                 </div>
-                <div className="text-xs font-bold text-slate-900">Oakridge Academy Alert</div>
+                <div className="text-xs font-bold text-slate-900">Farqaleet GGSS Alert</div>
                 <div className="text-[10px] text-slate-500 font-mono">To: {activeSmsModal.parentPhone}</div>
               </div>
 
@@ -494,7 +494,7 @@ export const NotificationTab: React.FC = () => {
               <div className="flex items-center">
                 <span className="w-16 font-semibold text-slate-500">From:</span>
                 <span className="text-slate-800">
-                  Oakridge Academy Attendance & Academic Services &lt;attendance@oakridgeacademy.edu&gt;
+                  Farqaleet GGSS Attendance & Academic Services &lt;attendance@farqaleetggss.edu.pk&gt;
                 </span>
               </div>
               <div className="flex items-center">

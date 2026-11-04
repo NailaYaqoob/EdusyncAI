@@ -18,6 +18,8 @@ import {
   Loader2,
   FileCheck,
   Key,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const HomeworkTab: React.FC = () => {
@@ -30,6 +32,8 @@ export const HomeworkTab: React.FC = () => {
     checkAndQueueOverdueAlerts,
     generateAIHomework,
     setActiveTab,
+    currentPersona,
+    setCurrentPersona,
   } = useApp();
 
   const [filter, setFilter] = useState<'all' | 'active' | 'overdue'>('all');
@@ -327,16 +331,23 @@ export const HomeworkTab: React.FC = () => {
                   Grading Rubric Matrix ({selectedAssignment.rubric.length})
                 </button>
 
-                <button
-                  onClick={() => setDetailTab('answer-key')}
-                  className={`pb-2.5 px-1 border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-                    detailTab === 'answer-key'
-                      ? 'border-indigo-600 text-indigo-700 font-semibold'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  Teacher Answer Key
-                </button>
+                {/* Admin Answer Key Tab (Strictly restricted to Admin Portal) */}
+                {currentPersona === 'teacher' && (
+                  <button
+                    onClick={() => setDetailTab('answer-key')}
+                    className={`pb-2.5 px-1 border-b-2 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                      detailTab === 'answer-key'
+                        ? 'border-indigo-600 text-indigo-700 font-semibold'
+                        : 'border-transparent text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <Key className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Admin Answer Key</span>
+                    <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded uppercase">
+                      Admin Only
+                    </span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => setDetailTab('submissions')}
@@ -421,36 +432,71 @@ export const HomeworkTab: React.FC = () => {
                   </div>
                 )}
 
-                {/* 3. Answer Key Tab */}
+                {/* 3. Answer Key Tab - Admin Portal Exclusive */}
                 {detailTab === 'answer-key' && (
-                  <div className="space-y-4">
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
-                      <Key className="w-4 h-4 shrink-0 text-amber-700" />
-                      <span>
-                        Confidential Teacher Answer Key & Scoring Guide (internal instructional reference).
-                      </span>
-                    </div>
-
+                  currentPersona === 'teacher' ? (
                     <div className="space-y-4">
-                      {selectedAssignment.answerKey.map((keyItem, idx) => (
-                        <div
-                          key={idx}
-                          className="p-4 rounded-lg border border-slate-200 bg-slate-50/60 space-y-1.5"
-                        >
-                          <div className="text-xs font-semibold text-slate-800">
-                            Question {idx + 1} Solution
+                      <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-3">
+                        <div className="p-1.5 bg-amber-100 text-amber-800 rounded-md shrink-0 mt-0.5">
+                          <Lock className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="font-bold text-amber-950 text-sm">Official Admin Answer Key & Scoring Guide</span>
+                            <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-amber-200/90 text-amber-900 rounded uppercase tracking-wide">
+                              Admin Portal Exclusive
+                            </span>
                           </div>
-                          <div className="text-xs font-medium text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200">
-                            {keyItem.correctAnswer}
-                          </div>
-                          <p className="text-xs text-slate-600 pt-1">
-                            <span className="font-semibold text-slate-700">Explanation: </span>
-                            {keyItem.explanation}
+                          <p className="text-xs text-amber-800/90 leading-relaxed">
+                            This master answer key and rubric guidance are strictly confidential and exclusively visible from the Farqaleet GGSS Admin Portal. All model solutions are omitted from student and parent views to safeguard evaluation integrity.
                           </p>
                         </div>
-                      ))}
+                      </div>
+
+                      <div className="space-y-4">
+                        {selectedAssignment.answerKey.map((keyItem, idx) => (
+                          <div
+                            key={idx}
+                            className="p-4 rounded-lg border border-slate-200 bg-slate-50/60 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between text-xs font-semibold text-slate-800">
+                              <span>Question {idx + 1} Solution</span>
+                              <span className="text-[10px] font-mono text-slate-400">Restricted Admin Reference</span>
+                            </div>
+                            <div className="text-xs font-medium text-emerald-800 bg-emerald-50 p-2.5 rounded border border-emerald-200 font-mono">
+                              {keyItem.correctAnswer}
+                            </div>
+                            <p className="text-xs text-slate-600 pt-1">
+                              <span className="font-semibold text-slate-700">Explanation & Scoring Rationale: </span>
+                              {keyItem.explanation}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-8 text-center space-y-3 bg-amber-50/50 rounded-xl border border-amber-200">
+                      <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+                        <Lock className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-base font-bold text-slate-900">Admin Authorization Required</h3>
+                      <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+                        The master Answer Key and step-by-step scoring solutions are strictly confidential and only visible from the Farqaleet GGSS Admin Portal.
+                      </p>
+                      <div className="pt-2">
+                        <button
+                          onClick={() => {
+                            setCurrentPersona('teacher');
+                            setActiveTab('homework');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg shadow-xs transition-colors"
+                        >
+                          <Key className="w-3.5 h-3.5" />
+                          <span>Verify Admin Access & Open Portal</span>
+                        </button>
+                      </div>
+                    </div>
+                  )
                 )}
 
                 {/* 4. Submissions Tab */}
@@ -601,7 +647,7 @@ export const HomeworkTab: React.FC = () => {
                     >
                       <option value="6th Grade">6th Grade (Middle School)</option>
                       <option value="7th Grade">7th Grade (Middle School)</option>
-                      <option value="8th Grade">8th Grade (Oakridge Standard)</option>
+                      <option value="8th Grade">8th Grade (Farqaleet GGSS)</option>
                       <option value="9th Grade">9th Grade (High School)</option>
                       <option value="10th Grade">10th Grade (High School)</option>
                     </select>
@@ -733,13 +779,17 @@ export const HomeworkTab: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setPreviewTab('answer-key')}
-                    className={`pb-2 px-1 border-b-2 ${
+                    className={`pb-2 px-1 border-b-2 flex items-center gap-1.5 ${
                       previewTab === 'answer-key'
                         ? 'border-indigo-600 text-indigo-700 font-semibold'
                         : 'border-transparent text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    Answer Key ({generatedPreview.answerKey?.length || 0})
+                    <Key className="w-3 h-3 text-amber-600" />
+                    <span>Admin Answer Key ({generatedPreview.answerKey?.length || 0})</span>
+                    <span className="text-[9px] font-mono font-bold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded">
+                      Admin Portal Only
+                    </span>
                   </button>
                 </div>
 
@@ -782,7 +832,11 @@ export const HomeworkTab: React.FC = () => {
                   )}
 
                   {previewTab === 'answer-key' && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
+                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 flex items-center gap-2">
+                        <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span>Confidential Admin Answer Key: Stored exclusively in the Farqaleet GGSS Admin Portal and omitted from parent/student views.</span>
+                      </div>
                       {generatedPreview.answerKey?.map((k: any, i: number) => (
                         <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
                           <div className="font-semibold text-emerald-800 mb-0.5">

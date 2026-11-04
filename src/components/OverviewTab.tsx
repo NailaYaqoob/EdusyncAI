@@ -53,14 +53,14 @@ export const OverviewTab: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500 mb-1">
-            <span>Oakridge Academy K-12</span>
+            <span>Farqaleet GGSS</span>
             <span aria-hidden="true">·</span>
             <span>Grade 8, Section A</span>
             <span aria-hidden="true">·</span>
             <span className="font-mono">{selectedDate}</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 font-display">
-            Classroom Operations & Daily Audit
+            Daily Overview
           </h1>
         </div>
 
@@ -110,7 +110,7 @@ export const OverviewTab: React.FC = () => {
           <div className="mt-2 text-xs text-slate-500 flex items-center gap-1.5">
             <span className="text-emerald-700 font-medium font-mono tabular-nums">{presentCount} present</span>
             <span>·</span>
-            <span className="text-amber-700 font-mono tabular-nums">{tardyCount} tardy</span>
+            <span className="text-amber-700 font-mono tabular-nums">{tardyCount} late</span>
           </div>
         </div>
 
@@ -136,7 +136,7 @@ export const OverviewTab: React.FC = () => {
             {absentCount}
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            <span>{excusedCount} additional excused</span>
+            <span>{excusedCount} on leave</span>
           </div>
         </div>
 
@@ -181,7 +181,7 @@ export const OverviewTab: React.FC = () => {
               <div className="p-6 text-center border border-dashed border-slate-200 rounded-lg">
                 <p className="text-xs font-medium text-emerald-800">No unexcused absences recorded today!</p>
                 <p className="text-xs text-slate-500 mt-1">
-                  All students in Grade 8 Section A are marked present or excused.
+                  All students in Grade 8 Section A are marked present or on leave.
                 </p>
               </div>
             ) : (

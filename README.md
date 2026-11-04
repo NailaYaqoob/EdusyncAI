@@ -1,6 +1,6 @@
-# EduSync AI — Classroom Attendance, Homework Studio & Parent Alert Center
+# Smart Attendance App — Farqaleet GGSS
 
-EduSync AI is a unified, full-stack K-12 classroom management platform built to streamline the three most time-consuming workflows for educators: daily attendance audits, differentiated assignment creation, and urgent parent communications.
+**Smart Attendance App** is a unified, full-stack school management platform built for **Farqaleet GGSS** to streamline the three most critical workflows for educators: daily attendance audits, differentiated homework creation, and automated parent communications.
 
 The application features full **mobile-first and desktop responsiveness**, powered by **Gemini 3.8 Flash** on the server for curriculum-aligned question generation, rubrics, and automated multi-channel parent alerts (SMS & Email).
 
@@ -9,9 +9,9 @@ The application features full **mobile-first and desktop responsiveness**, power
 ## Key Features
 
 ### 1. One-Tap Attendance Register & Absence Audit
-- **Quick Roll Call**: Mark students **Present**, **Absent**, **Tardy**, or **Excused** with instant feedback and a **Mark All Present** bulk action.
+- **Quick Roll Call**: Mark students **Present**, **Absent**, **Late**, or **Leave** with instant feedback and a **Mark All Present** bulk action.
 - **Absence Auto-Detection**: Flagging a student as absent automatically prepares an official parent alert in the dispatch queue.
-- **Excuse Documentation**: Record doctor's notes, medical clinic verifications, transit delays, or family emergency reasons directly against attendance records.
+- **Leave Documentation**: Record doctor's notes, medical clinic verifications, transit delays, or family emergency reasons directly against attendance records as official student leaves.
 - **Attendance Health Analytics**: Real-time class attendance rate with benchmark tracking (95% state target) and individual student cumulative attendance rates.
 - **Mobile Touch Cards**: On mobile screens, attendance rolls display as dedicated touch cards with $\ge 44\text{px}$ thumb-friendly buttons and direct phone dialer links.
 
@@ -22,7 +22,7 @@ The application features full **mobile-first and desktop responsiveness**, power
   - **Short Answer Questions**: Formative conceptual prompts.
   - **Essay & Application Challenges**: Real-world scenarios testing higher-order critical thinking.
 - **Standardized Rubric Matrices**: Detailed criteria, point allocations, and mastery descriptors visible to students and parents.
-- **Confidential Teacher Answer Keys**: Model solutions and step-by-step scoring guidance for educators.
+- **Confidential Admin Answer Keys**: Model solutions and step-by-step scoring guidance for administrators and instructors, strictly isolated and visible only from the Admin Portal (hidden from students and parents).
 - **Submission Tracking**: Monitor who has submitted, who is pending, and who is overdue with 1-click overdue alert triggers.
 
 ### 3. Parent Alert Center & Dispatch Simulator
@@ -34,8 +34,8 @@ The application features full **mobile-first and desktop responsiveness**, power
 ### 4. Dedicated Parent Portal View
 - **Guardian Switcher**: Test the portal from any parent's perspective (e.g. Parveen Zahra for Fatima Zahra, Tariq Ali for Muhammad Ali, Asma Malik for Zainab Malik).
 - **Daily Status & Attendance Record**: Inspect today's roll call status and 5-day attendance history.
-- **Interactive Excuse Submission**: Parents can submit medical notes or absence reasons that immediately synchronize with the teacher's register as "Excused".
-- **Homework & Rubric Inspector**: View upcoming deadlines, instructions, questions, and grading rubrics.
+- **Interactive Leave Application**: Parents can submit medical notes or absence reasons that immediately synchronize with the admin register as "Leave".
+- **Homework & Rubric Inspector**: View upcoming deadlines, instructions, questions, and grading rubrics with answer keys locked and protected.
 - **Parent Message Inbox**: Receive, acknowledge, and reply to school absence and overdue notices.
 
 ### 5. Authentic Pakistani Student Roster
@@ -53,26 +53,35 @@ The application comes pre-seeded with 12 diverse students and guardians:
 - **Noor Fatima** (Guardian: Bushra Fatima · `0305-6671928`)
 - **Saad Rehman** (Guardian: Atif Rehman · `0346-8829104`)
 
+### 6. QR Code Scanning & Digital Badge System
+- **Real-Time Camera Scanner**: Scans student QR badges continuously using the device camera (`jsQR` engine) with automatic video reticle targeting, laser animation, and camera flip (front/back).
+- **Audio & Haptic Feedback**: Synthesized Web Audio API sound effects (high double-beep on successful check-in, alert chime on duplicate, buzz on invalid badge) and mobile vibration.
+- **Duplicate Scan Prevention**: Automatically checks whether a student has already been checked in today and displays their initial morning timestamp.
+- **Instant Badge Simulator**: 1-click test suite allowing teachers or administrators to test check-in flows instantly without needing a physical camera or webcam.
+- **Image File Upload**: Scan attendance from photos or screenshots of student ID cards.
+- **Printable Student QR ID Badges**: High-resolution, printable PVC/paper identity cards for all 12 Pakistani students featuring the Farqaleet GGSS crest, student avatar, class, guardian phone, and encrypted ISO/IEC 18004 QR code.
+- **Audit Logs**: Comprehensive real-time log tracking every scan with student roll number, timestamp, and scanner station identifier (e.g., Gate-1 Scanner).
+
 ---
 
 ## Technical Architecture
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        EduSync AI Application                          │
+│                   Smart Attendance App (Farqaleet GGSS)                │
 ├────────────────────────────────────────────────────────────────────────┤
 │  Top Bar (Brand Wordmark · Navigation Links · Role Switcher)           │
 │  Fixed Mobile Bottom Tab Bar (Overview · Attendance · Homework · Alerts)│
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
 │  ┌────────────────────────────┐    ┌─────────────────────────────────┐ │
-│  │     Teacher Dashboard      │    │          Parent Portal          │ │
+│  │        Admin Portal        │    │          Parent Portal          │ │
 │  ├────────────────────────────┤    ├─────────────────────────────────┤ │
 │  │ • Class Attendance Matrix  │    │ • Student Attendance Health     │ │
-│  │ • Mobile Touch Roster      │    │ • Active Homework & Rubrics     │ │
-│  │ • AI Homework Generator    │    │ • School Alert Inbox            │ │
-│  │ • Assignment Distribution  │    │ • Excuse Submission Form        │ │
-│  │ • Notification Dispatch Q  │    │ • Interactive Acknowledgment    │ │
+│  │ • Mobile Touch Roster      │    │ • Questions & Grading Rubrics   │ │
+│  │ • AI Homework Generator    │    │ • (Answer Keys Strict Locked)   │ │
+│  │ • Admin Answer Key (Locked)│    │ • School Alert Inbox            │ │
+│  │ • Notification Dispatch Q  │    │ • Leave Submission Form         │ │
 │  └─────────────┬──────────────┘    └────────────────┬────────────────┘ │
 │                │                                    │                  │
 │                ▼                                    ▼                  │

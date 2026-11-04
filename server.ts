@@ -303,7 +303,7 @@ app.post('/api/alerts/generate', async (req: Request, res: Response): Promise<vo
     const { date, homeworkTitle, dueDate, attendanceRate, consecutiveDays } = details;
 
     if (aiClient) {
-      const prompt = `You are a school communications specialist composing an official parent alert for Oakridge Academy K-12.
+      const prompt = `You are a school communications specialist composing an official parent alert for Farqaleet GGSS.
 Student: ${studentName}
 Parent: ${parentName}
 Alert Type: ${type} (Options: absence, overdue_homework, low_attendance)
@@ -364,7 +364,7 @@ Generate a JSON object with:
       emailBody = `<p>Dear ${parentName},</p>
 <p>We are reaching out to inform you that <strong>${studentName}</strong> was marked absent from their classes today, <strong>${date || 'today'}</strong>. Consistent attendance is essential for academic growth.</p>
 <p>If this absence is excused (illness, doctor visit, or family emergency), please log into your <strong>Parent Portal</strong> to submit a note or reply directly to this notification. If you believe this record is an error, please contact the main office.</p>
-<p>Warm regards,<br>Attendance Administration<br>Quaid Public Academy</p>`;
+<p>Warm regards,<br>Attendance Administration<br>Farqaleet GGSS</p>`;
       actionPrompt = 'Submit doctor note or absence explanation via Parent Portal';
     } else if (type === 'overdue_homework') {
       smsMessage = `School Alert: ${studentName}'s assignment "${homeworkTitle || 'Homework'}" is overdue. Please ensure completion tonight.`;
@@ -378,16 +378,16 @@ Generate a JSON object with:
 </ul>
 <p>We encourage you to check in with ${studentName} this evening. They can access the full assignment instructions and grading rubric on their student portal. Late submissions submitted within 48 hours receive partial credit support.</p>
 <p>Thank you for partnering with us in your student's academic growth.</p>
-<p>Best regards,<br>Grade 8 Academic Team<br>Oakridge Academy</p>`;
+<p>Best regards,<br>Academic Team<br>Farqaleet GGSS</p>`;
       actionPrompt = 'Review missing assignment in the Parent Portal with student';
     } else {
-      smsMessage = `Oakridge Notice: ${studentName}'s attendance has dropped to ${attendanceRate || 'below threshold'}%. Let's connect on support.`;
+      smsMessage = `Farqaleet GGSS Notice: ${studentName}'s attendance has dropped to ${attendanceRate || 'below threshold'}%. Let's connect on support.`;
       emailSubject = `Important Notice: Attendance Monitoring for ${studentName}`;
       emailBody = `<p>Dear ${parentName},</p>
 <p>Our attendance tracking system has indicated that <strong>${studentName}'s</strong> cumulative attendance rate is currently at <strong>${attendanceRate || '88'}%</strong>, which is below our recommended 95% benchmark.</p>
 <p>Consistent attendance is directly tied to student academic success and wellbeing. We want to work collaboratively with your family to identify any barriers and support ${studentName} in maintaining regular attendance.</p>
 <p>Please reach out to our student counselor or reply to schedule a brief conference.</p>
-<p>Sincerely,<br>Oakridge Student Services</p>`;
+<p>Sincerely,<br>Farqaleet GGSS Student Support Services</p>`;
       actionPrompt = 'Schedule an advisor check-in or review attendance history';
     }
 

@@ -392,7 +392,7 @@ export const INITIAL_ALERTS: NotificationAlert[] = [
     emailBody: `<p>Dear Parveen Zahra,</p>
 <p>Our morning attendance records show that <strong>Fatima Zahra</strong> was absent from Section A today, <strong>${TODAY_STR}</strong>.</p>
 <p>Student safety and daily learning continuity are of utmost importance. If this absence is due to illness or urgent circumstances, please take a moment to submit an excuse note through your <strong>Parent Portal</strong> or reply directly to this message.</p>
-<p>Warm regards,<br>Attendance Office, Quaid Public Academy</p>`,
+<p>Warm regards,<br>Attendance Office, Farqaleet GGSS</p>`,
     actionPrompt: 'Submit excuse note via Parent Portal or call school office',
     occurrenceDate: TODAY_STR,
     createdAt: `${TODAY_STR} 08:25 AM`,

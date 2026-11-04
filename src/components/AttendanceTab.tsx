@@ -13,7 +13,13 @@ import {
   Phone,
   Mail,
   UserCheck,
+  QrCode,
+  Camera,
+  Zap,
+  ShieldCheck,
 } from 'lucide-react';
+import { QRScannerModal } from './QRScannerModal';
+import { StudentQRBadgeModal } from './StudentQRBadgeModal';
 
 export const AttendanceTab: React.FC = () => {
   const {
@@ -25,12 +31,17 @@ export const AttendanceTab: React.FC = () => {
     markAllPresent,
     setActiveTab,
     alerts,
+    qrScanLogs,
+    processQRScan,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | AttendanceStatus>('all');
   const [activeExcuseModal, setActiveExcuseModal] = useState<{ studentId: string; studentName: string; currentReason: string } | null>(null);
   const [excuseInput, setExcuseInput] = useState('');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isBadgesOpen, setIsBadgesOpen] = useState(false);
+
 
   // Get records for current date
   const todayRecords = attendance.filter((a) => a.date === selectedDate);
@@ -79,7 +90,7 @@ export const AttendanceTab: React.FC = () => {
         </div>
 
         {/* Date Selector & Primary Action */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-300 text-xs shadow-xs">
             <Calendar className="w-4 h-4 text-slate-500" />
             <input
@@ -91,14 +102,72 @@ export const AttendanceTab: React.FC = () => {
           </div>
 
           <button
-            onClick={markAllPresent}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg transition-colors whitespace-nowrap shadow-xs"
+            onClick={() => setIsScannerOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap shadow-xs relative"
           >
-            <UserCheck className="w-3.5 h-3.5" />
+            <Camera className="w-3.5 h-3.5 text-emerald-200" />
+            <span>QR Scanner</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping absolute -top-0.5 -right-0.5"></span>
+          </button>
+
+          <button
+            onClick={() => setIsBadgesOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors whitespace-nowrap shadow-xs"
+          >
+            <QrCode className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Student QR Badges</span>
+          </button>
+
+          <button
+            onClick={markAllPresent}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg transition-colors whitespace-nowrap shadow-xs"
+          >
+            <UserCheck className="w-3.5 h-3.5 text-slate-500" />
             <span>Mark All Present</span>
           </button>
         </div>
       </div>
+
+      {/* QR Attendance Live Operational Banner */}
+      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs border border-emerald-800/40">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center border border-emerald-400/30 text-emerald-300 shrink-0">
+            <QrCode className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white flex items-center gap-2">
+              <span>QR Code Attendance System Active</span>
+              <span className="px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] border border-emerald-400/20">
+                Gate 1 & Mobile Live
+              </span>
+            </div>
+            <div className="text-[11px] text-emerald-200/90">
+              {qrScanLogs.filter((l) => l.status === 'success' && l.date === selectedDate).length > 0
+                ? `${qrScanLogs.filter((l) => l.status === 'success' && l.date === selectedDate).length} student${
+                    qrScanLogs.filter((l) => l.status === 'success' && l.date === selectedDate).length > 1 ? 's' : ''
+                  } verified via digital badge today.`
+                : 'Scan student ID cards or use the instant badge simulator for fast morning check-in.'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsScannerOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>Launch Scanner</span>
+          </button>
+          <button
+            onClick={() => setIsBadgesOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition-colors"
+          >
+            Print ID Cards
+          </button>
+        </div>
+      </div>
+
 
       {/* Absence Notification Notification Callout Banner */}
       {absentCount > 0 && (
@@ -167,7 +236,7 @@ export const AttendanceTab: React.FC = () => {
           }`}
         >
           <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-            <span className="font-medium">Tardy</span>
+            <span className="font-medium">Late</span>
             <Clock className="w-3.5 h-3.5 text-amber-600" />
           </div>
           <div className="text-2xl font-bold font-mono text-amber-600 tabular-nums">{tardyCount}</div>
@@ -182,7 +251,7 @@ export const AttendanceTab: React.FC = () => {
           }`}
         >
           <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-            <span className="font-medium">Excused</span>
+            <span className="font-medium">Leave</span>
             <FileText className="w-3.5 h-3.5 text-slate-500" />
           </div>
           <div className="text-2xl font-bold font-mono text-slate-700 tabular-nums">{excusedCount}</div>
@@ -206,19 +275,28 @@ export const AttendanceTab: React.FC = () => {
 
           {/* Filter Tabs */}
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start sm:self-auto overflow-x-auto">
-            {(['all', 'present', 'absent', 'tardy', 'excused'] as const).map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize whitespace-nowrap shrink-0 ${
-                  filterStatus === status
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {status}
-              </button>
-            ))}
+            {(['all', 'present', 'absent', 'tardy', 'excused'] as const).map((status) => {
+              const label =
+                status === 'tardy'
+                  ? 'Late'
+                  : status === 'excused'
+                  ? 'Leave'
+                  : status;
+
+              return (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize whitespace-nowrap shrink-0 ${
+                    filterStatus === status
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -249,8 +327,16 @@ export const AttendanceTab: React.FC = () => {
                       />
                       <div>
                         <div className="font-bold text-sm text-slate-900">{student.name}</div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          Roll #{student.rollNumber} · {student.grade}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            Roll #{student.rollNumber} · {student.grade}
+                          </span>
+                          {record?.checkInTime && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>QR {record.checkInTime}</span>
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -318,7 +404,7 @@ export const AttendanceTab: React.FC = () => {
                           : 'bg-slate-100 text-slate-700 active:bg-slate-200'
                       }`}
                     >
-                      Tardy
+                      Late
                     </button>
 
                     <button
@@ -337,7 +423,7 @@ export const AttendanceTab: React.FC = () => {
                           : 'bg-slate-100 text-slate-700 active:bg-slate-200'
                       }`}
                     >
-                      Excused
+                      Leave
                     </button>
                   </div>
 
@@ -476,7 +562,7 @@ export const AttendanceTab: React.FC = () => {
                                 : 'text-slate-600 hover:text-amber-700 hover:bg-slate-100'
                             }`}
                           >
-                            Tardy
+                            Late
                           </button>
 
                           <button
@@ -495,7 +581,7 @@ export const AttendanceTab: React.FC = () => {
                                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                             }`}
                           >
-                            Excused
+                            Leave
                           </button>
                         </div>
                       </td>
@@ -527,6 +613,14 @@ export const AttendanceTab: React.FC = () => {
                             <span>Alert Queued</span>
                             <ArrowRight className="w-3 h-3" />
                           </button>
+                        ) : record?.checkInTime ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            title={`Verified via QR scan at ${record.checkInTime}`}
+                          >
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            <span>QR {record.checkInTime}</span>
+                          </span>
                         ) : (
                           <span className="text-slate-400 font-mono text-[11px]">
                             {record?.markedAt || '08:00 AM'}
@@ -542,21 +636,21 @@ export const AttendanceTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Excuse Modal Dialog */}
+      {/* Leave Modal Dialog */}
       {activeExcuseModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
             <h3 className="text-base font-semibold text-slate-900 mb-1 font-display">
-              Log Excuse Note for {activeExcuseModal.studentName}
+              Log Leave Reason for {activeExcuseModal.studentName}
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Specify the doctor verification, parent call note, or family reason for the excused absence.
+              Specify the doctor verification, parent call note, or family reason for the student leave.
             </p>
 
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Excuse Reason & Documentation
+                  Leave Reason & Documentation
                 </label>
                 <textarea
                   rows={3}
@@ -574,7 +668,7 @@ export const AttendanceTab: React.FC = () => {
                   'Flu / Illness at home',
                   'Family Emergency',
                   'School Bus Breakdown',
-                  'Approved School Field Trip',
+                  'Approved School Leave',
                 ].map((reason) => (
                   <button
                     key={reason}
@@ -601,12 +695,30 @@ export const AttendanceTab: React.FC = () => {
                 onClick={handleSaveExcuse}
                 className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg transition-colors shadow-xs"
               >
-                Save as Excused
+                Save as Leave
               </button>
             </div>
           </div>
         </div>
       )}
+      {/* QR Scanner Modal */}
+      <QRScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onOpenBadges={() => {
+          setIsScannerOpen(false);
+          setIsBadgesOpen(true);
+        }}
+      />
+
+      {/* Student QR Badges Printable Modal */}
+      <StudentQRBadgeModal
+        isOpen={isBadgesOpen}
+        onClose={() => setIsBadgesOpen(false)}
+        onScanBadgeDirectly={(payload) => {
+          processQRScan(payload, 'Quick Badge Click');
+        }}
+      />
     </div>
   );
 };
