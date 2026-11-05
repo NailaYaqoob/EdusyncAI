@@ -11,6 +11,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export const Navbar: React.FC = () => {
   const {
@@ -127,6 +128,7 @@ export const Navbar: React.FC = () => {
 
             {/* Zone 3: Desktop Role Switcher / Quick Action */}
             <div className="hidden sm:flex items-center gap-2 shrink-0">
+              <PWAInstallButton />
               {currentPersona === 'teacher' ? (
                 <>
                   <button
@@ -173,6 +175,7 @@ export const Navbar: React.FC = () => {
 
             {/* Mobile Header Right Controls (Toggle & Hamburger) */}
             <div className="flex sm:hidden items-center gap-1.5">
+              <PWAInstallButton />
               <button
                 onClick={() => {
                   if (currentPersona === 'teacher') {

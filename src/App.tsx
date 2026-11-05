@@ -11,6 +11,7 @@ import { AttendanceTab } from './components/AttendanceTab';
 import { HomeworkTab } from './components/HomeworkTab';
 import { NotificationTab } from './components/NotificationTab';
 import { ParentPortalTab } from './components/ParentPortalTab';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 const MainLayout: React.FC = () => {
   const { activeTab } = useApp();
@@ -45,6 +46,7 @@ const MainLayout: React.FC = () => {
           </div>
         </div>
       </footer>
+      <OfflineIndicator />
     </div>
   );
 };

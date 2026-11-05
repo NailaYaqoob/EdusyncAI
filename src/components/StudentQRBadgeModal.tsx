@@ -80,12 +80,243 @@ export const StudentQRBadgeModal: React.FC<StudentQRBadgeModalProps> = ({
     window.print();
   };
 
-  const handleDownloadActiveCard = () => {
-    if (!activeQrUrl) return;
-    const link = document.createElement('a');
-    link.download = `Farqaleet-GGSS-${activeStudent.rollNumber}-${activeStudent.name.replace(/\s+/g, '_')}.png`;
-    link.href = activeQrUrl;
-    link.click();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadActiveCard = async () => {
+    if (!activeStudent) return;
+    setIsDownloading(true);
+
+    try {
+      const payload = JSON.stringify({
+        school: 'Farqaleet GGSS',
+        studentId: activeStudent.id,
+        rollNumber: activeStudent.rollNumber,
+        name: activeStudent.name,
+      });
+
+      const highResQrUrl = await QRCode.toDataURL(payload, {
+        width: 340,
+        margin: 1,
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff',
+        },
+      });
+
+      const canvas = document.createElement('canvas');
+      const W = 720;
+      const H = 1140;
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const drawRoundedRect = (
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        r: number
+      ) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      };
+
+      // Outer white background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+
+      // Clip to rounded card
+      ctx.save();
+      drawRoundedRect(8, 8, W - 16, H - 16, 32);
+      ctx.clip();
+
+      // Card white fill
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(8, 8, W - 16, H - 16);
+
+      // Header gradient
+      const headerH = 172;
+      const grad = ctx.createLinearGradient(0, 0, W, headerH);
+      grad.addColorStop(0, '#065f46');
+      grad.addColorStop(1, '#134e4a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, headerH);
+
+      // Header text
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#6ee7b7';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText('GOVT GIRLS SECONDARY SCHOOL', W / 2, 54);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 32px sans-serif';
+      ctx.fillText('FARQALEET GGSS', W / 2, 98);
+
+      ctx.fillStyle = 'rgba(167, 243, 208, 0.9)';
+      ctx.font = '500 17px sans-serif';
+      ctx.fillText('Gulberg III, Lahore · Official Student Identity Card', W / 2, 134);
+
+      // Student Avatar (with fallback to initials if offline/CORS)
+      const avatarY = 276;
+      const avatarR = 76;
+
+      // Outer emerald ring
+      ctx.beginPath();
+      ctx.arc(W / 2, avatarY, avatarR + 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#d1fae5';
+      ctx.fill();
+
+      const loadImg = (src: string, useCors: boolean) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          if (useCors) img.crossOrigin = 'anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = src;
+        });
+
+      try {
+        const avatarImg = await loadImg(activeStudent.avatarUrl, true);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(W / 2, avatarY, avatarR, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(
+          avatarImg,
+          W / 2 - avatarR,
+          avatarY - avatarR,
+          avatarR * 2,
+          avatarR * 2
+        );
+        ctx.restore();
+      } catch {
+        // Fallback initials circle
+        ctx.beginPath();
+        ctx.arc(W / 2, avatarY, avatarR, 0, Math.PI * 2);
+        ctx.fillStyle = '#059669';
+        ctx.fill();
+        const initials = activeStudent.name
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 44px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(initials, W / 2, avatarY);
+        ctx.textBaseline = 'alphabetic';
+      }
+
+      // Student Name
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 34px sans-serif';
+      ctx.fillText(activeStudent.name, W / 2, 404);
+
+      // Roll Number Pill
+      ctx.font = 'bold 22px monospace';
+      const rollText = activeStudent.rollNumber;
+      const rollWidth = Math.max(150, ctx.measureText(rollText).width + 40);
+      drawRoundedRect(W / 2 - rollWidth / 2, 422, rollWidth, 42, 10);
+      ctx.fillStyle = '#d1fae5';
+      ctx.fill();
+      ctx.fillStyle = '#064e3b';
+      ctx.fillText(rollText, W / 2, 450);
+
+      // Divider
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(48, 492);
+      ctx.lineTo(W - 48, 492);
+      ctx.stroke();
+
+      // 2x2 Info Grid
+      const leftX = 56;
+      const rightX = W / 2 + 24;
+      ctx.textAlign = 'left';
+
+      const drawField = (x: number, y: number, label: string, value: string, valueColor = '#1e293b') => {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText(label.toUpperCase(), x, y);
+        ctx.fillStyle = valueColor;
+        ctx.font = '600 22px sans-serif';
+        ctx.fillText(value, x, y + 30);
+      };
+
+      drawField(leftX, 530, 'Class', `${activeStudent.grade} (${activeStudent.section})`);
+      drawField(rightX, 530, 'Father / Guardian', activeStudent.parentName);
+      drawField(leftX, 606, 'Emergency Phone', activeStudent.parentPhone, '#334155');
+      drawField(rightX, 606, 'Card Status', '● Active', '#047857');
+
+      // QR Code Box
+      const qrBoxSize = 356;
+      const qrBoxX = (W - qrBoxSize) / 2;
+      const qrBoxY = 672;
+      drawRoundedRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize + 34, 24);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      const qrImg = await loadImg(highResQrUrl, false);
+      ctx.drawImage(qrImg, qrBoxX + 28, qrBoxY + 20, 300, 300);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#475569';
+      ctx.font = 'bold 17px monospace';
+      ctx.fillText('SCAN TO MARK ATTENDANCE', W / 2, qrBoxY + qrBoxSize + 14);
+
+      // Footer
+      const footerY = H - 64;
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, footerY, W, 64);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, footerY);
+      ctx.lineTo(W, footerY);
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '600 18px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('Valid: 2026-2027', 40, footerY + 38);
+      ctx.textAlign = 'right';
+      ctx.fillText('GGSS SECURE ID', W - 40, footerY + 38);
+
+      ctx.restore();
+
+      // Outer Card Border
+      drawRoundedRect(8, 8, W - 16, H - 16, 32);
+      ctx.strokeStyle = 'rgba(5, 150, 105, 0.7)';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+
+      const cardDataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `Farqaleet-GGSS-ID-Card-${activeStudent.rollNumber}-${activeStudent.name.replace(/\s+/g, '_')}.png`;
+      link.href = cardDataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Failed to render full ID card:', err);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleDirectScan = (student: Student) => {
@@ -345,10 +576,12 @@ export const StudentQRBadgeModal: React.FC<StudentQRBadgeModalProps> = ({
 
                   <button
                     onClick={handleDownloadActiveCard}
-                    className="p-2 text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 rounded-xl border border-slate-300 transition-colors shadow-xs"
-                    title="Download QR Image"
+                    disabled={isDownloading}
+                    className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 rounded-xl border border-slate-300 transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                    title="Download Full Printable Student ID Card (PNG)"
                   >
                     <Download className="w-4 h-4" />
+                    <span>{isDownloading ? 'Saving...' : 'Download Card'}</span>
                   </button>
                 </div>
               </div>

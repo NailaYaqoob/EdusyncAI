@@ -18,6 +18,13 @@ import {
   Trash2,
   User,
   ShieldCheck,
+  ExternalLink,
+  Video,
+  Sparkles,
+  Info,
+  Maximize2,
+  HelpCircle,
+  ChevronDown,
 } from 'lucide-react';
 
 interface QRScannerModalProps {
@@ -41,9 +48,18 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<'camera' | 'simulator' | 'upload' | 'history'>('camera');
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraErrorCode, setCameraErrorCode] = useState<
+    'PERMISSION_DENIED' | 'NOT_FOUND' | 'IN_USE' | 'IFRAME_BLOCKED' | 'OVERCONSTRAINED' | 'UNKNOWN' | null
+  >(null);
+
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [isVirtualCamActive, setIsVirtualCamActive] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+
   const [lastScanResult, setLastScanResult] = useState<{
     success: boolean;
     isDuplicate?: boolean;
@@ -55,6 +71,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   } | null>(null);
 
   const [searchSimQuery, setSearchSimQuery] = useState('');
+  const [virtualPresentingStudent, setVirtualPresentingStudent] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -62,6 +79,21 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const animationFrameIdRef = useRef<number | null>(null);
   const lastScannedCodeRef = useRef<string>('');
   const lastScanTimeRef = useRef<number>(0);
+  const lastFrameScanTimeRef = useRef<number>(0);
+  const barcodeDetectorRef = useRef<any>(null);
+
+  // Initialize BarcodeDetector if natively supported (Chrome, Edge, Android)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        barcodeDetectorRef.current = new (window as any).BarcodeDetector({
+          formats: ['qr_code'],
+        });
+      } catch (e) {
+        console.warn('Native BarcodeDetector not available:', e);
+      }
+    }
+  }, []);
 
   // Synthesized Sound Effects via Web Audio API
   const playSound = useCallback((type: 'success' | 'duplicate' | 'error') => {
@@ -95,7 +127,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         osc2.start(ctx.currentTime + 0.12);
         osc2.stop(ctx.currentTime + 0.28);
       } else if (type === 'duplicate') {
-        // Medium informational note (587Hz)
+        // Warning notification tone (587Hz)
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'triangle';
@@ -170,52 +202,140 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     [processQRScan, playSound]
   );
 
-  // Start Camera Stream
-  const startCamera = useCallback(async () => {
+  // Enumerate camera video input devices
+  const updateAvailableDevices = useCallback(async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+      setAvailableDevices(videoInputs);
+    } catch (err) {
+      console.warn('Could not enumerate media devices:', err);
+    }
+  }, []);
+
+  // Multi-tier MediaStream getter with progressive fallbacks
+  const requestMediaStream = async (deviceId?: string, mode: 'environment' | 'user' = facingMode): Promise<MediaStream> => {
+    // Attempt 1: Explicit device ID if chosen by user
+    if (deviceId) {
+      return await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: deviceId } },
+        audio: false,
+      });
+    }
+
+    // Attempt 2: High resolution with ideal facingMode
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: mode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+    } catch (err1: any) {
+      console.warn('Tier 1 constraints failed, trying basic facingMode:', err1?.message);
+      // Attempt 3: Loose facingMode
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: mode } },
+          audio: false,
+        });
+      } catch (err2: any) {
+        console.warn('Tier 2 constraints failed, trying generic video (desktop webcam):', err2?.message);
+        // Attempt 4: Generic video (solves OverconstrainedError on desktop webcams without environment capability)
+        return await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+    }
+  };
+
+  // Start Camera Stream with comprehensive error detection
+  const startCamera = useCallback(async (forcedDeviceId?: string) => {
+    setCameraLoading(true);
     setCameraError(null);
+    setCameraErrorCode(null);
+
+    // Check basic WebRTC support
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Camera access is not supported by your browser environment. Please use Simulator Mode.');
-      setActiveTab('simulator');
+      setCameraError('Webcam access is not supported by this browser. You can use the Virtual Camera Feed or Badge Simulator below.');
+      setCameraErrorCode('NOT_FOUND');
+      setCameraLoading(false);
       return;
     }
 
     try {
-      // Stop any existing stream
+      // Clean up previous active stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: facingMode,
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-        audio: false,
-      });
-
+      const stream = await requestMediaStream(forcedDeviceId || selectedDeviceId, facingMode);
       streamRef.current = stream;
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
+        const video = videoRef.current;
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('muted', 'true');
+        video.muted = true;
+
+        // Ensure video is playing cleanly
+        await new Promise<void>((resolve) => {
+          video.onloadedmetadata = () => {
+            video.play()
+              .then(() => resolve())
+              .catch((e) => {
+                console.warn('Video play interrupted:', e);
+                resolve();
+              });
+          };
+          // Timeout fallback in case loadedmetadata doesn't fire immediately
+          setTimeout(resolve, 800);
+        });
+
         setCameraActive(true);
+        setIsVirtualCamActive(false);
+        updateAvailableDevices();
       }
     } catch (err: any) {
       console.warn('Camera stream error:', err);
-      let errorMsg = 'Could not access camera. Check device permissions or use Simulator Mode.';
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        errorMsg = 'Camera permission was denied. Please allow camera permissions in browser settings, or use the instant Simulator tab below.';
-      } else if (err.name === 'NotFoundError') {
-        errorMsg = 'No camera hardware found on this device. Switching to instant Simulator tab.';
+      const name = err.name || '';
+      const message = err.message || '';
+
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setCameraErrorCode('PERMISSION_DENIED');
+        setCameraError(
+          'Camera permission is currently blocked. If you are inside an embedded frame, click "Open App in New Tab" below or allow Camera in your browser URL bar.'
+        );
+      } else if (name === 'SecurityError' || message.includes('permissions policy') || message.includes('disallowed')) {
+        setCameraErrorCode('IFRAME_BLOCKED');
+        setCameraError(
+          'Camera access is restricted by the preview iframe security policy. Click "Open App in New Tab" to test live camera with full native permissions.'
+        );
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setCameraErrorCode('NOT_FOUND');
+        setCameraError('No webcam hardware was detected on this device. You can test live scanning using the Virtual Camera Feed below.');
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        setCameraErrorCode('IN_USE');
+        setCameraError('Your camera is currently in use by another application (e.g., Zoom, Google Meet, MS Teams). Please close other apps and retry.');
+      } else if (name === 'OverconstrainedError') {
+        setCameraErrorCode('OVERCONSTRAINED');
+        setCameraError('Camera resolution constraints could not be satisfied. Retrying with default device settings...');
+      } else {
+        setCameraErrorCode('UNKNOWN');
+        setCameraError(`Camera connection issue: ${message || 'Unknown device error'}. You can use the Virtual Camera Feed or Badge Simulator.`);
       }
-      setCameraError(errorMsg);
+
       setCameraActive(false);
-      // Auto-fallback to simulator for frictionless testing
-      setActiveTab('simulator');
+    } finally {
+      setCameraLoading(false);
     }
-  }, [facingMode]);
+  }, [facingMode, selectedDeviceId, updateAvailableDevices]);
 
   // Stop Camera Stream
   const stopCamera = useCallback(() => {
@@ -233,9 +353,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     setCameraActive(false);
   }, []);
 
-  // Continuous Video Frame Scanning via jsQR
+  // Continuous Video Frame Scanning via Hardware BarcodeDetector + jsQR Fallback
   useEffect(() => {
-    if (!cameraActive || activeTab !== 'camera') {
+    if (!cameraActive || activeTab !== 'camera' || isVirtualCamActive) {
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
         animationFrameIdRef.current = null;
@@ -245,26 +365,55 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     let isScanning = true;
 
-    const scanFrame = () => {
+    const scanFrame = async () => {
       if (!isScanning) return;
 
       const video = videoRef.current;
-      const canvas = canvasRef.current;
+      const now = performance.now();
 
-      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (ctx) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Throttle scanning to every 90ms for optimal battery, thermals, and speed
+      if (now - lastFrameScanTimeRef.current >= 90) {
+        lastFrameScanTimeRef.current = now;
 
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert',
-          });
+        if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+          let detected = false;
 
-          if (code && code.data) {
-            handlePayloadScanned(code.data, 'Live Camera Feed');
+          // FAST PATH: Modern native hardware-accelerated BarcodeDetector
+          if (barcodeDetectorRef.current) {
+            try {
+              const barcodes = await barcodeDetectorRef.current.detect(video);
+              if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
+                detected = true;
+                handlePayloadScanned(barcodes[0].rawValue, 'Live Camera (Hardware)');
+              }
+            } catch {
+              // Fallback to canvas
+            }
+          }
+
+          // COMPATIBILITY PATH: jsQR with canvas
+          if (!detected) {
+            const canvas = canvasRef.current;
+            if (canvas) {
+              const ctx = canvas.getContext('2d', { willReadFrequently: true });
+              if (ctx) {
+                // Resize internal canvas to reasonable scanning resolution
+                const scanWidth = Math.min(video.videoWidth, 640);
+                const scanHeight = Math.round((scanWidth / video.videoWidth) * video.videoHeight);
+                canvas.width = scanWidth;
+                canvas.height = scanHeight;
+
+                ctx.drawImage(video, 0, 0, scanWidth, scanHeight);
+                const imageData = ctx.getImageData(0, 0, scanWidth, scanHeight);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                  inversionAttempts: 'dontInvert',
+                });
+
+                if (code && code.data) {
+                  handlePayloadScanned(code.data, 'Live Camera (jsQR)');
+                }
+              }
+            }
           }
         }
       }
@@ -280,12 +429,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         cancelAnimationFrame(animationFrameIdRef.current);
       }
     };
-  }, [cameraActive, activeTab, handlePayloadScanned]);
+  }, [cameraActive, activeTab, isVirtualCamActive, handlePayloadScanned]);
 
   // Lifecycle when modal opens/closes or tab changes
   useEffect(() => {
     if (isOpen && activeTab === 'camera') {
-      startCamera();
+      if (!isVirtualCamActive) {
+        startCamera();
+      }
     } else {
       stopCamera();
     }
@@ -293,13 +444,48 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     return () => {
       stopCamera();
     };
-  }, [isOpen, activeTab, startCamera, stopCamera]);
+  }, [isOpen, activeTab, isVirtualCamActive, startCamera, stopCamera]);
 
   if (!isOpen) return null;
 
   // Toggle front/back camera
   const toggleFacingMode = () => {
-    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
+    const next = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(next);
+    setSelectedDeviceId('');
+  };
+
+  // Switch camera device
+  const handleDeviceChange = (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    startCamera(deviceId);
+  };
+
+  // Activate Virtual Live Camera Feed (allows instant testing in iframes or on devices without webcams)
+  const enableVirtualCamera = () => {
+    stopCamera();
+    setIsVirtualCamActive(true);
+    setCameraError(null);
+    setCameraErrorCode(null);
+  };
+
+  // Virtual badge presenter action
+  const simulateVirtualScan = (student: typeof students[0]) => {
+    setVirtualPresentingStudent(student.name);
+    setTimeout(() => {
+      handlePayloadScanned(
+        JSON.stringify({
+          school: 'Farqaleet GGSS',
+          studentId: student.id,
+          rollNumber: student.rollNumber,
+          name: student.name,
+        }),
+        'Virtual Gate 1 Camera'
+      );
+      setTimeout(() => {
+        setVirtualPresentingStudent(null);
+      }, 1000);
+    }, 400);
   };
 
   // Handle Image File Upload to scan QR
@@ -328,7 +514,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           playSound('error');
           setLastScanResult({
             success: false,
-            message: 'No readable QR code found in uploaded image. Please try a clearer picture.',
+            message: 'No readable QR code found in uploaded image. Please try a clearer picture of the student badge.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           });
         }
@@ -350,7 +536,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       {/* Hidden processing canvas */}
       <canvas ref={canvasRef} className="hidden" />
 
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white flex items-center justify-between border-b border-white/10 shrink-0">
           <div className="flex items-center gap-3">
@@ -390,7 +576,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         {/* Mode Navigation Tabs */}
         <div className="flex items-center border-b border-slate-200 bg-slate-50 px-4 pt-2 gap-2 text-xs font-semibold overflow-x-auto shrink-0">
           <button
-            onClick={() => setActiveTab('camera')}
+            onClick={() => {
+              setActiveTab('camera');
+              if (isVirtualCamActive) {
+                // keep virtual if active
+              } else if (!cameraActive) {
+                startCamera();
+              }
+            }}
             className={`pb-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'camera'
                 ? 'border-emerald-600 text-emerald-800'
@@ -399,6 +592,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           >
             <Camera className="w-3.5 h-3.5" />
             <span>Live Camera</span>
+            {cameraActive && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping ml-0.5" />
+            )}
           </button>
 
           <button
@@ -410,7 +606,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             }`}
           >
             <Zap className="w-3.5 h-3.5 text-amber-500" />
-            <span>Badge Simulator (Instant)</span>
+            <span>Badge Simulator</span>
             <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 text-[10px]">
               Easy Test
             </span>
@@ -444,7 +640,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         {/* Scan Status Toast / Banner */}
         {lastScanResult && (
           <div
-            className={`px-4 py-3 border-b transition-all flex items-center justify-between gap-3 ${
+            className={`px-4 py-2.5 border-b transition-all flex items-center justify-between gap-3 ${
               lastScanResult.success
                 ? lastScanResult.isDuplicate
                   ? 'bg-amber-50 border-amber-200 text-amber-900'
@@ -507,91 +703,327 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           {/* TAB 1: LIVE CAMERA SCANNER */}
           {activeTab === 'camera' && (
             <div className="flex flex-col items-center">
+              {/* Top Mode Notice or Camera Switcher */}
+              <div className="w-full max-w-md flex items-center justify-between gap-2 mb-2.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                      isVirtualCamActive
+                        ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                        : cameraActive
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    {isVirtualCamActive ? (
+                      <>
+                        <Sparkles className="w-3 h-3 text-indigo-600" />
+                        <span>Virtual Live Camera Feed</span>
+                      </>
+                    ) : cameraActive ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Physical Webcam Active</span>
+                      </>
+                    ) : (
+                      <>
+                        <CameraOff className="w-3 h-3 text-slate-400" />
+                        <span>Camera Standby</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {isVirtualCamActive ? (
+                    <button
+                      onClick={() => {
+                        setIsVirtualCamActive(false);
+                        startCamera();
+                      }}
+                      className="text-emerald-700 hover:text-emerald-900 font-medium inline-flex items-center gap-1 hover:underline text-[11px]"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Use Physical Webcam</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={enableVirtualCamera}
+                      className="text-indigo-700 hover:text-indigo-900 font-medium inline-flex items-center gap-1 hover:underline text-[11px]"
+                      title="Switch to simulated live camera feed"
+                    >
+                      <Sparkles className="w-3 h-3 text-indigo-500" />
+                      <span>Virtual Feed Mode</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Viewfinder Window */}
-              <div className="relative w-full max-w-md aspect-4/3 rounded-2xl overflow-hidden bg-black shadow-inner border border-slate-700 flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-cover"
-                  autoPlay
-                  playsInline
-                  muted
-                />
+              <div className="relative w-full max-w-md aspect-4/3 rounded-2xl overflow-hidden bg-slate-950 shadow-inner border border-slate-800 flex items-center justify-center">
+                {/* 1. PHYSICAL CAMERA FEED */}
+                {!isVirtualCamActive && (
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    playsInline
+                    muted
+                  />
+                )}
+
+                {/* 2. VIRTUAL LIVE CAMERA FEED */}
+                {isVirtualCamActive && (
+                  <div className="w-full h-full bg-radial from-slate-800 to-slate-950 relative flex flex-col items-center justify-center overflow-hidden">
+                    {/* Simulated security gate background */}
+                    <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:16px_16px]" />
+                    
+                    {/* Gate watermark & timecode */}
+                    <div className="absolute top-3 left-3 text-left font-mono text-[10px] text-emerald-400 space-y-0.5 pointer-events-none select-none z-10">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                        <span>LIVE [REC] 60FPS</span>
+                      </div>
+                      <div className="text-slate-400">FARQALEET GGSS • GATE 1</div>
+                      <div className="text-slate-500">{new Date().toLocaleTimeString()}</div>
+                    </div>
+
+                    {/* Virtual student badge being presented under scanner */}
+                    {virtualPresentingStudent ? (
+                      <div className="relative z-20 flex flex-col items-center animate-in zoom-in-75 duration-200">
+                        <div className="w-48 p-3 rounded-xl bg-white text-slate-900 shadow-2xl border-2 border-emerald-400 text-center">
+                          <div className="text-[10px] font-bold text-emerald-800 uppercase">
+                            Farqaleet GGSS Badge
+                          </div>
+                          <div className="text-xs font-extrabold mt-1 truncate">
+                            {virtualPresentingStudent}
+                          </div>
+                          <div className="w-20 h-20 mx-auto my-1.5 border border-slate-300 rounded-lg p-1 bg-white flex items-center justify-center">
+                            <QrCode className="w-16 h-16 text-slate-900" />
+                          </div>
+                          <span className="text-[9px] font-mono text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-semibold">
+                            SCANNING IN PROGRESS...
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center p-6 z-10 max-w-xs">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center mb-2">
+                          <QrCode className="w-6 h-6 animate-pulse" />
+                        </div>
+                        <h4 className="text-xs font-bold text-white">Virtual Camera Standby</h4>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Click any student card below the camera window to present their badge to this lens.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Reticle / Viewfinder Overlay */}
                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                  {/* Outer dark vignette */}
-                  <div className="w-56 h-56 sm:w-64 sm:h-64 border-2 border-emerald-400 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+                  <div className="w-56 h-56 sm:w-64 sm:h-64 border-2 border-emerald-400/80 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
                     {/* Corner accents */}
-                    <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl-sm"></div>
-                    <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr-sm"></div>
-                    <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-emerald-400 rounded-bl-sm"></div>
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-emerald-400 rounded-br-sm"></div>
+                    <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl-sm" />
+                    <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr-sm" />
+                    <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-emerald-400 rounded-bl-sm" />
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-emerald-400 rounded-br-sm" />
 
                     {/* Animated Scanning Laser Line */}
-                    <div className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-300 to-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse"></div>
+                    <div className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-300 to-emerald-500 shadow-[0_0_12px_#10b981] animate-pulse top-1/2 -translate-y-1/2" />
 
-                    <div className="absolute bottom-2 inset-x-0 text-center">
-                      <span className="px-2 py-0.5 bg-black/60 rounded text-[10px] text-emerald-300 font-mono tracking-wider font-semibold uppercase">
-                        Align Badge QR
+                    <div className="absolute bottom-2.5 inset-x-0 text-center">
+                      <span className="px-2 py-0.5 bg-black/70 rounded text-[10px] text-emerald-300 font-mono tracking-wider font-semibold uppercase">
+                        Align Student QR Badge
                       </span>
                     </div>
                   </div>
                 </div>
 
+                {/* Camera Loading Spinner */}
+                {cameraLoading && (
+                  <div className="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center text-white p-4">
+                    <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mb-2" />
+                    <span className="text-xs font-medium">Connecting to camera stream...</span>
+                  </div>
+                )}
+
                 {/* Camera Inactive / Error Overlay */}
-                {(!cameraActive || cameraError) && (
-                  <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-6 text-center text-white">
-                    <CameraOff className="w-10 h-10 text-slate-400 mb-2" />
-                    <h3 className="text-sm font-bold">Camera Standby / Unavailable</h3>
-                    <p className="text-xs text-slate-300 mt-1 max-w-xs">
-                      {cameraError || 'Allow camera permission or use the instant Simulator tab to test without a webcam.'}
+                {!cameraLoading && !isVirtualCamActive && (!cameraActive || cameraError) && (
+                  <div className="absolute inset-0 bg-slate-900/95 flex flex-col items-center justify-center p-5 text-center text-white">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-2.5">
+                      <CameraOff className="w-6 h-6" />
+                    </div>
+
+                    <h3 className="text-sm font-bold text-white">Camera Access Notice</h3>
+
+                    <p className="text-xs text-slate-300 mt-1 max-w-sm leading-relaxed">
+                      {cameraError ||
+                        'Camera permission is required to scan badges live. If running inside an embedded preview iframe, open in a dedicated browser tab or switch to Virtual Feed mode.'}
                     </p>
-                    <div className="flex items-center gap-2 mt-4">
+
+                    {/* Action buttons inside error overlay */}
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                      {/* Direct standalone link to open without iframe restriction */}
+                      <a
+                        href={typeof window !== 'undefined' ? window.location.href : '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open in Dedicated Tab</span>
+                      </a>
+
                       <button
-                        onClick={startCamera}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        onClick={enableVirtualCamera}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Use Virtual Cam</span>
+                      </button>
+
+                      <button
+                        onClick={() => startCamera()}
+                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Retry Camera</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('simulator')}
-                        className="px-3.5 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold transition-colors"
-                      >
-                        Use Simulator Tab
+                        <span>Retry</span>
                       </button>
                     </div>
+
+                    <button
+                      onClick={() => setActiveTab('simulator')}
+                      className="mt-3 text-[11px] text-emerald-300 hover:text-emerald-200 underline"
+                    >
+                      Or switch to 1-Tap Student Badge Simulator &rarr;
+                    </button>
                   </div>
                 )}
               </div>
 
-              {/* Camera Controls Bar */}
-              <div className="flex items-center justify-between w-full max-w-md mt-3 px-2 text-xs text-slate-600">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={toggleFacingMode}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-colors"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Flip Camera</span>
-                  </button>
-                  <button
-                    onClick={cameraActive ? stopCamera : startCamera}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-colors"
-                  >
-                    {cameraActive ? 'Pause' : 'Resume'}
-                  </button>
+              {/* Camera Controls & Hardware Switchers */}
+              <div className="w-full max-w-md mt-3 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    {!isVirtualCamActive && (
+                      <>
+                        <button
+                          onClick={toggleFacingMode}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs font-medium"
+                          title="Switch between front and back camera"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Flip ({facingMode === 'environment' ? 'Back' : 'Front'})</span>
+                        </button>
+
+                        <button
+                          onClick={cameraActive ? stopCamera : () => startCamera()}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs font-medium"
+                        >
+                          {cameraActive ? 'Pause' : 'Resume'}
+                        </button>
+                      </>
+                    )}
+
+                    {isVirtualCamActive && (
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Click student cards below to test scans live &darr;
+                      </span>
+                    )}
+                  </div>
+
+                  {onOpenBadges && (
+                    <button
+                      onClick={onOpenBadges}
+                      className="text-emerald-700 hover:text-emerald-800 font-medium inline-flex items-center gap-1 hover:underline text-xs"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>View Badges</span>
+                    </button>
+                  )}
                 </div>
 
-                {onOpenBadges && (
-                  <button
-                    onClick={onOpenBadges}
-                    className="text-emerald-700 hover:text-emerald-800 font-medium inline-flex items-center gap-1 hover:underline"
-                  >
-                    <QrCode className="w-3.5 h-3.5" />
-                    <span>View Student Badges</span>
-                  </button>
+                {/* Camera Selector Dropdown (if multiple video inputs detected) */}
+                {availableDevices.length > 1 && !isVirtualCamActive && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-500 shrink-0 font-medium">Camera:</span>
+                    <select
+                      value={selectedDeviceId}
+                      onChange={(e) => handleDeviceChange(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="">Default / Auto Detect</option>
+                      {availableDevices.map((dev, idx) => (
+                        <option key={dev.deviceId || idx} value={dev.deviceId}>
+                          {dev.label || `Camera ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
+
+                {/* VIRTUAL LIVE CAMERA: Interactive Badge Presentation Tray */}
+                {isVirtualCamActive && (
+                  <div className="mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-indigo-950">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Present Student Badges to Lens</span>
+                      </div>
+                      <span className="text-[10px] text-indigo-600 font-normal">
+                        1-Click Test Scans
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-1">
+                      {students.slice(0, 9).map((st) => (
+                        <button
+                          key={st.id}
+                          onClick={() => simulateVirtualScan(st)}
+                          disabled={virtualPresentingStudent !== null}
+                          className="p-2 rounded-lg bg-white border border-indigo-100 hover:border-indigo-400 hover:shadow-xs transition-all text-left flex items-center gap-2 group disabled:opacity-50"
+                        >
+                          <img
+                            src={st.avatarUrl}
+                            alt={st.name}
+                            className="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200"
+                          />
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-bold text-slate-800 truncate group-hover:text-indigo-700">
+                              {st.name}
+                            </div>
+                            <div className="text-[9px] font-mono text-slate-400 truncate">
+                              {st.rollNumber}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Helpful Diagnostics Card & Urdu Tips */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5 text-slate-600">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                    <HelpCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Camera Troubleshooting & Tips (رہنمائی)</span>
+                  </div>
+                  <ul className="text-[11px] space-y-1 text-slate-500 list-disc list-inside">
+                    <li>
+                      <strong>Iframe Preview / اندرونی فریم:</strong> اگر کیمرہ بلاک نظر آئے تو اوپر دیے گئے{' '}
+                      <span className="font-semibold text-emerald-700">"Open in Dedicated Tab"</span> لنک پر کلک کریں تاکہ مکمل براؤزر میں کیمرہ پرمیشن فعال ہو سکے۔
+                    </li>
+                    <li>
+                      <strong>Browser Permission:</strong> Ensure camera is allowed in your browser address bar (lock icon &rarr; Site settings &rarr; Camera: Allow).
+                    </li>
+                    <li>
+                      <strong>Hardware:</strong> If your PC does not have a physical webcam, use the{' '}
+                      <span className="font-semibold text-indigo-700">"Virtual Feed Mode"</span> or the{' '}
+                      <span className="font-semibold text-amber-700">"Badge Simulator"</span> tab.
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}
@@ -710,7 +1142,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
               {qrScanLogs.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">
-                  No QR scans recorded yet for today. Use the live camera or badge simulator to check in students!
+                  No QR scans recorded yet for today. Use the live camera, virtual feed, or badge simulator to check in students!
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
@@ -776,7 +1208,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-1.5 text-slate-500">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Encrypted QR Check-In Protocol</span>
+            <span className="hidden sm:inline">Encrypted QR Check-In Protocol</span>
+            <span className="sm:hidden">QR Protocol</span>
           </div>
 
           <div className="flex items-center gap-2">

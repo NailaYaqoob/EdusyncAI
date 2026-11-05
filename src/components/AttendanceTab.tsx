@@ -85,7 +85,7 @@ export const AttendanceTab: React.FC = () => {
             <span className="font-mono tabular-nums">{students.length} Total Students</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-display">
-            Daily Attendance & Absence Tracking
+            Daily Attendance
           </h1>
         </div>
 
